@@ -66,25 +66,91 @@ Build a fast, browser-based **Level Designer Telemetry Visualization Tool** for 
 ---
 
 ## 5. Living Knowledge Base
-*(To be populated and locked after Phase 1 & Phase 2.)*
+*(Populated and verified after Phase 1 & Phase 2.)*
 
 ### 5.1 Workspace & Data Directory Structure
-- *Pending Phase 1 inspection.*
+- `raw_data/player_data/`:
+  - `February_10` through `February_14`: 1,243 Parquet files without `.parquet` extension (named `{user_id}_{match_id}.nakama-0`).
+  - `minimaps/`: Raw minimaps (`AmbroseValley_Minimap.png`, `GrandRift_Minimap.png`, `Lockdown_Minimap.jpg`).
+- `public/`:
+  - `minimaps/`: Resized `2048×2048` WebP minimaps (`AmbroseValley.webp`, `GrandRift.webp`, `Lockdown.webp`).
+  - `data/`:
+    - `manifest.json`: Index of all 796 matches with summary metadata and duration.
+    - `matches/<clean_match_id>.json`: Individual player trajectory paths and non-movement event points.
+    - `heatmaps/<map_id>.json`: Aggregated coordinate points per date (`2026-02-10` to `2026-02-14`) for human traffic, bot traffic, kills, deaths, storm deaths, and loot.
+- `scripts/`:
+  - `preprocess.py`: Verified ETL pipeline.
+  - `verify_maps.py`: Visual trajectory-on-minimap overlay verification script.
 
-### 5.2 Dataset README Summary
-- *Pending Phase 1 inspection.*
+### 5.2 Dataset README Summary & Phase 1 Verified Stats
+- **Date Range:** February 10 – 14, 2026.
+- **Total Files:** 1,243 files successfully read across all 5 date folders.
+- **Total Event Rows:** 89,104 rows across the entire dataset.
+- **Unique Matches:** 796 matches (`match_id` values).
+- **Unique Players:** 339 total (245 Human UUIDs, 94 Numeric Bot IDs).
+- **Maps:** `AmbroseValley`, `GrandRift`, `Lockdown`.
 
 ### 5.3 Parquet Schema & Encoding Quirks
-- *Pending Phase 1 inspection.*
+| Column | Parquet Type | Pandas Dtype | Description / Quirks |
+|---|---|---|---|
+| `user_id` | `string` | `object` | Player or Bot identifier. |
+| `match_id` | `string` | `object` | Match GUID with `.nakama-0` server suffix. |
+| `map_id` | `string` | `object` | Map name. May read as string or byte array depending on engine. |
+| `x` | `float` | `float32` | World X coordinate. |
+| `y` | `float` | `float32` | Elevation / height (not used for 2D minimap plotting). |
+| `z` | `float` | `float32` | World Z coordinate. |
+| `ts` | `timestamp[ms]` | `datetime64[ms]` | **Critical quirk:** Column stores raw Unix timestamps in **seconds** (e.g. `1770910386`). Casting `df['ts'].astype('int64')` in pandas preserves the true integer seconds without truncation or division. |
+| `event` | `binary` | `object` (bytes) | Byte strings (e.g. `b'Position'`, `b'Kill'`). Must decode with `.decode('utf-8')`. |
 
 ### 5.4 Bot vs. Human Classification Rule
-- *Pending Phase 1 inspection.*
+- **Bot:** `user_id.isdigit()` or non-UUID format (e.g. `"1440"`, `"382"`).
+- **Human:** Standard 36-char UUID format (regex: `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`).
 
 ### 5.5 Event Types & Timestamp Normalization
-- *Pending Phase 1 inspection.*
+**8 Discovered Event Types (exact string matches after decoding):**
+- Movement: `Position` (Human), `BotPosition` (Bot).
+- Combat: `Kill` (Human killed Human), `Killed` (Human killed by Human), `BotKill` (Human killed Bot), `BotKilled` (Human killed by Bot).
+- Environment: `KilledByStorm`.
+- Item: `Loot`.
+
+**Timestamp Normalization Formula:**
+- Raw `ts_raw = df['ts'].astype('int64')` gives Unix seconds.
+- Match start: `min_ts = match_df['ts_raw'].min()`.
+- Match relative time: `t_sec = round(float(ts_raw - min_ts), 2)` (measured in seconds from match start, `0.0` to `duration_sec`).
+- Durations for top matches: ~734s (12m 14s), ~759s (12m 39s), ~795s (13m 15s).
 
 ### 5.6 Minimap Assets & Coordinate Mapping Formula
-- *Pending Phase 1 inspection.*
+**Actual Raw Minimap Dimensions (vs. README claims):**
+- `AmbroseValley_Minimap.png`: 4320 × 4320 px (9.7 MB)
+- `GrandRift_Minimap.png`: 2160 × 2158 px (2.9 MB)
+- `Lockdown_Minimap.jpg`: 9000 × 9000 px (11.8 MB)
 
-### 5.7 Approved Tradeoffs & Edge-Case Handling
-- *Pending Phase 1 & 2 decisions.*
+**Optimized WebP Assets:**
+- All 3 images resized with Pillow `Image.Resampling.LANCZOS` to `2048×2048` WebP (`quality=88`) in `public/minimaps/` (~230–275 KB each, 762 KB total).
+- Filenames: `AmbroseValley.webp`, `GrandRift.webp`, `Lockdown.webp`.
+
+**World to 2D Minimap UV / Pixel Formula (Canonical 0–1024 Space):**
+```python
+u = (x - origin_x) / scale
+v = (z - origin_z) / scale
+px = round(u * 1024.0, 1)
+py = round((1.0 - v) * 1024.0, 1)  # Inverted Y for image coordinate space
+```
+**Map Parameters:**
+- AmbroseValley: `scale = 900`, `origin_x = -370`, `origin_z = -473`
+- GrandRift: `scale = 581`, `origin_x = -290`, `origin_z = -290`
+- Lockdown: `scale = 1000`, `origin_x = -500`, `origin_z = -500`
+
+**Plotting / Canvas Alignment:**
+- Use `extent=[0, 1024, 1024, 0]` when rendering the background map so `px, py` coordinates in `[0, 1024]` align 1:1 across the entire canvas.
+
+### 5.7 Final JSON Schemas
+1. **`public/data/manifest.json`**:
+   - `maps`: `["AmbroseValley", "GrandRift", "Lockdown"]`
+   - `matches`: Array of objects sorted by `event_count` descending:
+     `{ match_id, map_id, date, human_count, bot_count, event_count, duration_sec, kill_count, death_count, storm_deaths }`
+2. **`public/data/matches/<clean_match_id>.json`**:
+   - `{ match_id, map_id, date, duration_sec, players: [{ id, is_bot, path: [[t, px, py], ...] }], events: [{ t, px, py, type, user_id, is_bot }] }`
+3. **`public/data/heatmaps/<map_id>.json`**:
+   - Dict keyed by date (`"2026-02-10"` ... `"2026-02-14"`):
+     `{ human_traffic: [[px, py], ...], bot_traffic: [...], kills: [...], deaths: [...], storm: [...], loot: [...] }`
