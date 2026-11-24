@@ -10,6 +10,15 @@
 
 ---
 
+## 🧭 Feature Walkthrough
+
+1. **Select Map, Date & Match:** Choose `AmbroseValley`, `GrandRift`, or `Lockdown` in the left sidebar, optionally filter by date (`2026-02-10`–`2026-02-14`), and pick any match from the activity-sorted dropdown.
+2. **Isolate Entities & Events:** Toggle **Humans** (solid cyan paths) vs. **Bots** (dashed amber paths) or click **Humans Only**. Click any player marker on the canvas to isolate their journey and dim all other entities.
+3. **Scrub Match Playback:** Use the bottom timeline bar (`Spacebar` to play/pause, `1x`–`20x` speed, or drag the scrubber) and switch between **Full Path** and **30s Tail** modes to watch combat, loot, and storm events trigger in real time.
+4. **Inspect Spatial Heatmaps:** Enable map-wide **Human Traffic**, **Bot Traffic**, **Kill Zones**, **Death Zones**, **Storm Deaths**, or **Loot Hotspots** and adjust **Opacity** and **Radius** to inspect bottlenecks against the underlying map geometry.
+
+---
+
 ## ⚡ Key Features
 
 * **High-DPI Interactive Minimaps:**
