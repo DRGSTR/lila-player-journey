@@ -1,0 +1,17 @@
+# Raw dataset (keep local, commit only preprocess script & processed outputs if small)
+raw_data/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.env*.local
+
+# OS / Editor
+.DS_Store
+Thumbs.db
